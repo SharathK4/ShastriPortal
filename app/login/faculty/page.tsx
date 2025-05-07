@@ -11,9 +11,13 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { School } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/lib/auth-context"
+import { UserData } from "@/lib/localStorage"
+import { initializeFacultyData } from "@/lib/faculty-storage"
 
 export default function FacultyLogin() {
   const router = useRouter()
+  const { login } = useAuth()
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -29,12 +33,37 @@ export default function FacultyLogin() {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // In a real app, this would be an API call to authenticate
+      // For now, we'll simulate authentication
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Generate a fake faculty ID
+      const facultyId = `FAC${Math.floor(1000 + Math.random() * 9000)}`
+      
+      // Mock user data (in production, this would come from API)
+      const userData: UserData = {
+        id: facultyId,
+        name: "Dr. Sharma",
+        email: formData.email,
+        userType: "faculty",
+        // In production, token would come from the backend
+        token: "mock-jwt-token",
+      }
+      
+      // Initialize faculty data in localStorage
+      initializeFacultyData(facultyId, userData.name, userData.email)
+      
+      // Use authentication context to log in
+      login(userData)
+      
+      // No need to redirect here as the login function handles it
+    } catch (error) {
+      console.error("Login failed:", error)
       setIsLoading(false)
-      // Redirect to faculty dashboard
-      router.push("/faculty/dashboard")
-    }, 1500)
+    }
   }
 
   return (

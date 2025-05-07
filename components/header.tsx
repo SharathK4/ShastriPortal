@@ -1,65 +1,73 @@
-import { Bell, Settings } from "lucide-react"
+"use client"
+
+import type React from "react"
+
+import { ModeToggle } from "@/components/ui/mode-toggle"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { User, Bell, LogOut } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
 
 interface HeaderProps {
   userName: string
-  userType: "student" | "faculty"
+  userType: "student" | "faculty" | "admin"
 }
 
 export function Header({ userName, userType }: HeaderProps) {
+  const { logout } = useAuth()
+
   return (
-    <div className="border-b">
-      <div className="flex h-16 items-center px-6">
-        <div className="flex-1">
-          <div className="flex flex-col">
-            <h2 className="text-2xl font-medium">Hi, {userName}</h2>
-            <p className="text-sm text-muted-foreground">Welcome Back to Shastri Portal</p>
-          </div>
+    <header className="sticky top-0 z-50 bg-background border-b p-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">
+            <span className="text-primary">Shastri</span> Portal
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {userType.charAt(0).toUpperCase() + userType.slice(1)} Dashboard
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon">
+
+        <div className="flex items-center space-x-4">
+          <Button variant="outline" size="icon">
             <Bell className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon">
-            <Settings className="h-5 w-5" />
-          </Button>
+
+          <ModeToggle />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src="/placeholder-user.jpg" alt={userName} />
-                  <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
-                </Avatar>
+              <Button
+                variant="outline"
+                className="relative h-9 rounded-full overflow-hidden focus-visible:ring-offset-0"
+              >
+                <User className="h-5 w-5" />
+                <span className="sr-only">User menu</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{userName}</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {userType === "student" ? "Student" : "Faculty"}
-                  </p>
+            <DropdownMenuContent align="end">
+              <div className="px-2 py-1.5">
+                <div className="text-sm font-medium">{userName}</div>
+                <div className="text-xs text-muted-foreground">
+                  {userType.charAt(0).toUpperCase() + userType.slice(1)}
                 </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
+              </div>
               <DropdownMenuItem>Profile</DropdownMenuItem>
               <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem onClick={logout} className="text-red-500">
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
-    </div>
+    </header>
   )
 }
 

@@ -1,17 +1,103 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, TrendingDown, TrendingUp } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { usePreferences } from "@/lib/preferences-context"
+import { useRouter } from "next/navigation"
+import { 
+  getEnrolledCourses, 
+  getAssignments, 
+  getGrades, 
+  getNotifications,
+  Course,
+  Assignment,
+  Grade,
+  Notification
+} from "@/lib/student-storage"
+import { autoSyncAssignments } from "@/lib/assignment-connector"
 
 export default function StudentDashboard() {
-  const [selectedView, setSelectedView] = useState<"week" | "month">("week")
+  const { user, isAuthenticated, isLoading } = useAuth()
+  const { preferences, updatePreferences } = usePreferences()
+  const router = useRouter()
+  
+  // State for student data
+  const [courses, setCourses] = useState<Course[]>([])
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [pendingAssignments, setPendingAssignments] = useState(0)
+  const [grades, setGrades] = useState<Grade[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [latestScore, setLatestScore] = useState(0)
+  const [lastPeriodScore, setLastPeriodScore] = useState(0)
+  
+  // If loading, show nothing
+  if (isLoading) {
+    return null
+  }
+  
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login/student')
+    }
+  }, [isLoading, isAuthenticated, router])
+  
+  // Load data from localStorage
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Sync assignments first
+      autoSyncAssignments()
+      
+      // Load courses
+      const storedCourses = getEnrolledCourses()
+      setCourses(storedCourses)
+      
+      // Load assignments
+      const storedAssignments = getAssignments()
+      setAssignments(storedAssignments)
+      
+      // Count pending assignments
+      const pending = storedAssignments.filter(a => a.status === 'pending').length
+      setPendingAssignments(pending)
+      
+      // Load grades
+      const storedGrades = getGrades()
+      setGrades(storedGrades)
+      
+      // Calculate latest score
+      if (storedGrades.length > 0) {
+        // Assuming the grades are sorted by date, we get the last one
+        const latest = storedGrades[storedGrades.length - 1]
+        setLatestScore(latest.score)
+        
+        // Compare with previous period (this is mock data)
+        setLastPeriodScore(latest.score - 5) // Mock: 5 points improvement
+      }
+      
+      // Load notifications
+      const storedNotifications = getNotifications()
+      setNotifications(storedNotifications)
+    }
+  }, [isAuthenticated])
+  
+  // Use selectedView from preferences or default to "week"
+  const [selectedView, setSelectedView] = useState<"week" | "month">(
+    (preferences.viewMode as "week" | "month") || "week"
+  )
+  
+  // Update preferences when view changes
+  const handleViewChange = (view: "week" | "month") => {
+    setSelectedView(view)
+    updatePreferences({ viewMode: view })
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header userName="Virat" userType="student" />
+      <Header userName={user?.name || "Student"} userType="student" />
 
       <main className="flex-1 p-6 space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -20,7 +106,7 @@ export default function StudentDashboard() {
               <CardTitle className="text-sm font-medium">Current No. of Assignments</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">3</div>
+              <div className="text-4xl font-bold">{pendingAssignments}</div>
             </CardContent>
           </Card>
 
@@ -30,7 +116,7 @@ export default function StudentDashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex items-end justify-between">
-                <div className="text-4xl font-bold">7</div>
+                <div className="text-4xl font-bold">{courses.length}</div>
                 <div className="flex items-center text-sm text-muted-foreground">
                   <span>vs last period 12 months</span>
                   <TrendingUp className="ml-1 h-4 w-4 text-green-500" />
@@ -45,10 +131,14 @@ export default function StudentDashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex items-end justify-between">
-                <div className="text-4xl font-bold">15</div>
+                <div className="text-4xl font-bold">{latestScore}</div>
                 <div className="flex items-center text-sm text-muted-foreground">
-                  <span>vs last period 12 months</span>
-                  <TrendingDown className="ml-1 h-4 w-4 text-red-500" />
+                  <span>vs last period score {lastPeriodScore}</span>
+                  {latestScore > lastPeriodScore ? (
+                    <TrendingUp className="ml-1 h-4 w-4 text-green-500" />
+                  ) : (
+                    <TrendingDown className="ml-1 h-4 w-4 text-red-500" />
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -85,208 +175,57 @@ export default function StudentDashboard() {
               <Button
                 variant={selectedView === "week" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedView("week")}
+                onClick={() => handleViewChange("week")}
               >
                 Week
               </Button>
               <Button
                 variant={selectedView === "month" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedView("month")}
+                onClick={() => handleViewChange("month")}
               >
                 Month
               </Button>
             </div>
           </div>
 
-          <div className="border rounded-lg overflow-hidden">
-            <div className="calendar-grid min-h-[600px] relative">
-              {/* Time labels */}
-              <div className="border-r border-b p-2 text-xs text-muted-foreground">Time</div>
-              <div className="border-b"></div>
-              <div className="border-b"></div>
-              <div className="border-b"></div>
-              <div className="border-b"></div>
-              <div className="border-b"></div>
-              <div className="border-b"></div>
-              <div className="border-b"></div>
-
-              {/* 8 AM */}
-              <div className="border-r p-2 text-xs text-muted-foreground">8 AM</div>
-              <div className="border-r relative">
-                <div className="calendar-event client-presentation" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">8 AM - 9 AM</div>
-                  <div className="text-xs">Client Presentation Preparation</div>
+          <div className="bg-card p-4 rounded-md border border-border h-64">
+            {selectedView === "week" ? (
+              <div className="text-center py-20">Weekly View Calendar Content</div>
+            ) : (
+              <div className="text-center py-20">Monthly View Calendar Content</div>
+            )}
+          </div>
+        </div>
+        
+        {/* Recent notifications */}
+        {notifications.length > 0 && (
+          <div className="space-y-4 animate-fadeIn" style={{ animationDelay: "0.4s" }}>
+            <h2 className="text-2xl font-medium">Recent Notifications</h2>
+            <div className="space-y-2">
+              {notifications.slice(0, 3).map((notification) => (
+                <div key={notification.id} className="p-3 bg-card rounded-md border border-border">
+                  <div className="flex justify-between">
+                    <h3 className="font-medium">{notification.title}</h3>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(notification.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-sm">{notification.message}</p>
                 </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event project-kickoff" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">8 AM - 9 AM</div>
-                  <div className="text-xs">New Project Kickoff Meeting</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-
-              {/* 9 AM */}
-              <div className="border-r p-2 text-xs text-muted-foreground">9 AM</div>
-              <div className="border-r relative">
-                <div className="calendar-event client-meeting" style={{ top: "0px", height: "90px" }}>
-                  <div className="text-xs font-medium">9 AM - 10:30 AM</div>
-                  <div className="text-xs">Client Meeting Planning</div>
-                </div>
-              </div>
-              <div className="border-r relative">
-                <div className="calendar-event design-revisions" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">9 AM - 10 AM</div>
-                  <div className="text-xs">Design Revisions</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event design-refinement" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">9 AM - 10 AM</div>
-                  <div className="text-xs">Design Refinement</div>
-                </div>
-              </div>
-              <div className="border-r relative">
-                <div className="calendar-event design-team" style={{ top: "0px", height: "90px" }}>
-                  <div className="text-xs font-medium">9:30 AM - 10 AM</div>
-                  <div className="text-xs">Design Team Stand-up Meeting</div>
-                </div>
-              </div>
-              <div className="border-r relative">
-                <div className="calendar-event planning-goal" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">9 AM - 10 AM</div>
-                  <div className="text-xs">Planning & Goal Setting for the Week</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-
-              {/* 10 AM */}
-              <div className="border-r p-2 text-xs text-muted-foreground">10 AM</div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event collaboration" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">10 AM - 11 AM</div>
-                  <div className="text-xs">Collaboration with Development Team</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event meeting-advisor" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">10 AM - 11 AM</div>
-                  <div className="text-xs">Meeting with Advisor internal team</div>
-                </div>
-              </div>
-
-              {/* 11 AM */}
-              <div className="border-r p-2 text-xs text-muted-foreground">11 AM</div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event meeting-ux" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">11 AM - 12 AM</div>
-                  <div className="text-xs">Meetup with UX Internal Team</div>
-                </div>
-              </div>
-              <div className="border-r relative">
-                <div className="calendar-event client-feedback" style={{ top: "0px", height: "90px" }}>
-                  <div className="text-xs font-medium">11 AM - 12:30 AM</div>
-                  <div className="text-xs">Client Feedback Meeting</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-
-              {/* 12 PM */}
-              <div className="border-r p-2 text-xs text-muted-foreground">12 AM</div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event meeting-gojek" style={{ top: "0px", height: "60px" }}>
-                  <div className="text-xs font-medium">12 AM - 1 AM</div>
-                  <div className="text-xs">Meeting with Gojek internal team</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event client-progress" style={{ top: "0px", height: "90px" }}>
-                  <div className="text-xs font-medium">12 AM - 1:30 PM</div>
-                  <div className="text-xs">Client Meeting Progress report</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-
-              {/* 1 PM */}
-              <div className="border-r p-2 text-xs text-muted-foreground">1 PM</div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
-              <div className="border-r relative">
-                <div className="calendar-event industry-webinar" style={{ top: "30px", height: "60px" }}>
-                  <div className="text-xs font-medium">1:30 PM - 2 AM</div>
-                  <div className="text-xs">Industry Webinar/ Workshop</div>
-                </div>
-              </div>
-              <div className="border-r"></div>
-              <div className="border-r"></div>
+              ))}
+              {notifications.length > 3 && (
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => router.push('/student/notifications')}
+                >
+                  View All Notifications
+                </Button>
+              )}
             </div>
           </div>
-
-          {selectedView === "month" && (
-            <div className="mt-6 animate-fadeIn">
-              <div className="flex justify-between items-center mb-4">
-                <Button variant="ghost" size="sm">
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Previous
-                </Button>
-                <h3 className="text-lg font-medium">July 2022</h3>
-                <Button variant="ghost" size="sm">
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-
-              <div className="mini-calendar">
-                {/* Week days */}
-                {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
-                  <div key={i} className="text-center text-sm font-medium py-2">
-                    {day}
-                  </div>
-                ))}
-
-                {/* Days from previous month */}
-                {[27, 28, 29, 30].map((day) => (
-                  <div key={`prev-${day}`} className="mini-calendar-day other-month">
-                    {day}
-                  </div>
-                ))}
-
-                {/* Days in current month */}
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                  <div
-                    key={day}
-                    className={`mini-calendar-day ${day === 15 ? "today" : ""} ${
-                      [2, 9, 16, 23, 30].includes(day) || [3, 10, 17, 24, 31].includes(day) ? "weekend" : ""
-                    } ${[7, 14, 21, 28].includes(day) ? "selected" : ""}`}
-                  >
-                    {day}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </main>
     </div>
   )

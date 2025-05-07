@@ -1,228 +1,293 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle2, Clock, HelpCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import {
+  getTickets,
+  createTicket,
+  updateTicket,
+  Ticket,
+  addNotification
+} from "@/lib/student-storage"
 
-interface Ticket {
-  id: string
-  title: string
-  category: string
-  status: "open" | "in-progress" | "resolved" | "closed"
-  date: string
-  description: string
-}
-
-const tickets: Ticket[] = [
-  {
-    id: "T-1001",
-    title: "Unable to submit assignment",
-    category: "Technical",
-    status: "resolved",
-    date: "July 20, 2022",
-    description: "I'm unable to submit my assignment for CSE 1. The submit button is not working.",
-  },
-  {
-    id: "T-1002",
-    title: "Request for deadline extension",
-    category: "Academic",
-    status: "in-progress",
-    date: "July 22, 2022",
-    description: "I would like to request an extension for the Machine Learning project due to medical reasons.",
-  },
-  {
-    id: "T-1003",
-    title: "Login issues on mobile app",
-    category: "Technical",
-    status: "open",
-    date: "July 24, 2022",
-    description: "I'm unable to login to the mobile app. It keeps showing an error message.",
-  },
-]
-
-export default function TicketRaise() {
-  const [activeTab, setActiveTab] = useState<"myTickets" | "newTicket">("myTickets")
-  const [formData, setFormData] = useState({
+export default function StudentTicket() {
+  const { user, isAuthenticated, isLoading } = useAuth()
+  const router = useRouter()
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [newTicket, setNewTicket] = useState({
     title: "",
-    category: "",
     description: "",
+    priority: "medium" as "low" | "medium" | "high",
   })
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+  
+  // If loading, show nothing
+  if (isLoading) {
+    return null
   }
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Handle form submission
-    alert("Ticket submitted successfully!")
-    setFormData({
+  
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login/student')
+    }
+  }, [isLoading, isAuthenticated, router])
+  
+  // Load tickets from localStorage
+  useEffect(() => {
+    if (isAuthenticated) {
+      const storedTickets = getTickets()
+      setTickets(storedTickets)
+    }
+  }, [isAuthenticated])
+  
+  // Handle creating a new ticket
+  const handleSubmitTicket = () => {
+    if (!newTicket.title || !newTicket.description) return
+    
+    const ticket: Ticket = {
+      id: `ticket-${Date.now()}`,
+      title: newTicket.title,
+      description: newTicket.description,
+      status: 'open',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      priority: newTicket.priority,
+    }
+    
+    const updatedTickets = createTicket(ticket)
+    setTickets(updatedTickets)
+    
+    // Reset form
+    setNewTicket({
       title: "",
-      category: "",
       description: "",
+      priority: "medium",
     })
-    setActiveTab("myTickets")
+    
+    // Add a notification for the ticket creation
+    addNotification({
+      id: `ticket-${Date.now()}`,
+      title: "Ticket Created",
+      message: `Your ticket "${ticket.title}" has been created successfully`,
+      createdAt: new Date().toISOString(),
+      isRead: false,
+      type: 'ticket'
+    })
   }
-
-  const getStatusIcon = (status: Ticket["status"]) => {
+  
+  // Format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date)
+  }
+  
+  // Get status badge color
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case "open":
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />
-      case "in-progress":
-        return <Clock className="h-4 w-4 text-blue-500" />
-      case "resolved":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />
-      case "closed":
-        return <HelpCircle className="h-4 w-4 text-gray-500" />
+      case 'open':
+        return 'bg-blue-500 text-white'
+      case 'in-progress':
+        return 'bg-yellow-500 text-white'
+      case 'resolved':
+        return 'bg-green-500 text-white'
+      case 'closed':
+        return 'bg-gray-500 text-white'
+      default:
+        return 'bg-gray-200'
     }
   }
-
-  const getStatusColor = (status: Ticket["status"]) => {
-    switch (status) {
-      case "open":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
-      case "in-progress":
-        return "bg-blue-100 text-blue-800 border-blue-200"
-      case "resolved":
-        return "bg-green-100 text-green-800 border-green-200"
-      case "closed":
-        return "bg-gray-100 text-gray-800 border-gray-200"
+  
+  // Get priority badge color
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-500 text-white'
+      case 'medium':
+        return 'bg-yellow-500 text-white'
+      case 'low':
+        return 'bg-green-500 text-white'
+      default:
+        return 'bg-gray-200'
     }
   }
+  
+  // Filter tickets by status
+  const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in-progress')
+  const resolvedTickets = tickets.filter(t => t.status === 'resolved' || t.status === 'closed')
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header userName="Virat" userType="student" />
+      <Header userName={user?.name || "Student"} userType="student" />
 
-      <main className="flex-1 p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Support Tickets</h1>
-          <div className="flex space-x-2">
-            <Button
-              variant={activeTab === "myTickets" ? "default" : "outline"}
-              onClick={() => setActiveTab("myTickets")}
-            >
-              My Tickets
-            </Button>
-            <Button
-              variant={activeTab === "newTicket" ? "default" : "outline"}
-              onClick={() => setActiveTab("newTicket")}
-            >
-              Raise New Ticket
-            </Button>
-          </div>
-        </div>
+      <main className="flex-1 p-6 space-y-8">
+        <h1 className="text-3xl font-bold">Support Tickets</h1>
 
-        {activeTab === "myTickets" ? (
-          <div className="space-y-4 animate-fadeIn">
-            {tickets.map((ticket) => (
-              <Card key={ticket.id} className="overflow-hidden">
-                <CardHeader className="bg-muted/50 pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="outline">{ticket.id}</Badge>
-                      <CardTitle className="text-lg">{ticket.title}</CardTitle>
-                    </div>
-                    <Badge className={getStatusColor(ticket.status)} variant="outline">
-                      <span className="flex items-center">
-                        {getStatusIcon(ticket.status)}
-                        <span className="ml-1 capitalize">{ticket.status.replace("-", " ")}</span>
-                      </span>
-                    </Badge>
-                  </div>
-                  <CardDescription className="flex items-center justify-between mt-2">
-                    <span>Category: {ticket.category}</span>
-                    <span>Submitted on: {ticket.date}</span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">{ticket.description}</p>
-                </CardContent>
-                <CardFooter className="bg-muted/20 p-3 flex justify-end">
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card className="animate-fadeIn">
-            <CardHeader>
-              <CardTitle>Raise a New Support Ticket</CardTitle>
-              <CardDescription>
-                Fill out the form below to submit a new support ticket. Our team will respond as soon as possible.
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleSubmit}>
+        <Tabs defaultValue="create" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-3">
+            <TabsTrigger value="create">Create Ticket</TabsTrigger>
+            <TabsTrigger value="active">Active Tickets</TabsTrigger>
+            <TabsTrigger value="resolved">Resolved Tickets</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="create" className="space-y-6 animate-fadeIn">
+            <Card>
+              <CardHeader>
+                <CardTitle>Create New Support Ticket</CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="title">Ticket Title</Label>
                   <Input
                     id="title"
-                    name="title"
                     placeholder="Brief description of your issue"
-                    value={formData.title}
-                    onChange={handleChange}
-                    required
+                    value={newTicket.title}
+                    onChange={(e) => setNewTicket({ ...newTicket, title: e.target.value })}
                   />
                 </div>
-
+                
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
+                  <Label htmlFor="priority">Priority</Label>
                   <Select
-                    value={formData.category}
-                    onValueChange={(value) => handleSelectChange("category", value)}
-                    required
+                    value={newTicket.priority}
+                    onValueChange={(value: "low" | "medium" | "high") => 
+                      setNewTicket({ ...newTicket, priority: value })
+                    }
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a category" />
+                    <SelectTrigger id="priority">
+                      <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
-                      <SelectItem value="academic">Academic</SelectItem>
-                      <SelectItem value="financial">Financial</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-
+                
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
                   <Textarea
                     id="description"
-                    name="description"
-                    placeholder="Provide details about your issue"
-                    rows={5}
-                    value={formData.description}
-                    onChange={handleChange}
-                    required
+                    placeholder="Detailed description of your issue"
+                    className="min-h-[150px]"
+                    value={newTicket.description}
+                    onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
                   />
                 </div>
-              </CardContent>
-              <CardFooter className="flex justify-between">
-                <Button variant="outline" type="button" onClick={() => setActiveTab("myTickets")}>
-                  Cancel
+                
+                <Button 
+                  className="w-full" 
+                  onClick={handleSubmitTicket}
+                  disabled={!newTicket.title || !newTicket.description}
+                >
+                  Submit Ticket
                 </Button>
-                <Button type="submit">Submit Ticket</Button>
-              </CardFooter>
-            </form>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="active" className="space-y-6 animate-fadeIn">
+            {openTickets.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-lg text-muted-foreground">No active tickets found.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {openTickets.map((ticket) => (
+                  <Card key={ticket.id} className="animate-fadeIn">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="text-lg font-medium">{ticket.title}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Created: {formatDate(ticket.createdAt)}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Badge className={getStatusColor(ticket.status)}>
+                              {ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)}
+                            </Badge>
+                            <Badge className={getPriorityColor(ticket.priority)}>
+                              {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)} Priority
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="p-3 bg-secondary/20 rounded-md">
+                          <p className="whitespace-pre-line">{ticket.description}</p>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button variant="outline" size="sm">
+                            View Details
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="resolved" className="space-y-6 animate-fadeIn">
+            {resolvedTickets.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-lg text-muted-foreground">No resolved tickets found.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {resolvedTickets.map((ticket) => (
+                  <Card key={ticket.id} className="animate-fadeIn">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="text-lg font-medium">{ticket.title}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Created: {formatDate(ticket.createdAt)}
+                              {ticket.status === 'resolved' && (
+                                <> • Resolved: {formatDate(ticket.updatedAt)}</>
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Badge className={getStatusColor(ticket.status)}>
+                              {ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="p-3 bg-secondary/20 rounded-md">
+                          <p className="whitespace-pre-line">{ticket.description}</p>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button variant="outline" size="sm">
+                            View Details
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   )
